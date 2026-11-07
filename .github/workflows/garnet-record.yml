@@ -34,26 +34,20 @@ jobs:
           uppercase: 'true'
           prefix: 'tool_version_'
 
-      - name: Set up Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+      - name: Install uv
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
         with:
+          version: '${{ env.TOOL_VERSION_UV }}'
           python-version: '${{ env.TOOL_VERSION_PYTHON }}'
-
-      - name: Install and configure Poetry
-        uses: snok/install-poetry@a783c322200f0519c7926aa6faa857c4e23e9263 # v1.4.2
-        with:
-          version: '${{ env.TOOL_VERSION_POETRY }}'
-          virtualenvs-create: true
-          virtualenvs-in-project: true
-          installer-parallel: true
+          enable-cache: true
 
       - name: Install dependencies (lifecycle scripts execute here)
-        run: poetry install
+        run: uv sync --locked
         working-directory: chart_data_extractor
 
       - name: Test
         continue-on-error: true
-        run: poetry build && poetry run pytest --verbose -x
+        run: uv build && uv run pytest --verbose -x
         working-directory: chart_data_extractor
 
       - name: Let sensor settle
