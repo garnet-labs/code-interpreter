@@ -1,0 +1,56 @@
+name: Dependency install and test (recorded)
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - 'rb/**'
+
+concurrency:
+  group: record-${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  install-test:
+    name: Install and test (recorded)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      # OIDC exchange; no token to configure.
+      - uses: garnet-org/action@673a06d87748bec49e4d8df22d371b2a3420aba4 # v2.5.2
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies (lifecycle scripts execute here)
+        working-directory: template
+        run: python -m venv "$RUNNER_TEMP/v" && "$RUNNER_TEMP/v/bin/pip" install -r requirements.txt -r server/requirements.txt
+
+      - name: Boot Jupyter and the interpreter server, run one cell
+        continue-on-error: true
+        run: |
+          sudo install -d -m 0700 -o "$USER" /run/e2b-jupyter
+          sudo install -d -o "$USER" /home/user
+          mkdir -p ~/.jupyter && cp template/jupyter_server_config.py ~/.jupyter/
+          "$RUNNER_TEMP/v/bin/jupyter" server --IdentityProvider.token="" > jupyter.log 2>&1 &
+          sleep 15
+          (cd template/server && "$RUNNER_TEMP/v/bin/uvicorn" main:app --host 127.0.0.1 --port 49999 > ../../server.log 2>&1 &)
+          for i in $(seq 1 60); do curl -sf localhost:49999/health && break; sleep 2; done
+          curl -s -XPOST localhost:49999/execute -H 'content-type: application/json' -d '{"code":"print(1+1)"}' | head -c 2000; echo
+          curl -s -o /dev/null -w 'tcp8888=%{http_code}\n' localhost:8888/api || true
+          sleep 5
+          pkill -f uvicorn || true; pkill -f 'jupyter' || true
+          tail -30 jupyter.log server.log
+
+      - name: Let sensor settle
+        if: always()
+        run: sleep 30
