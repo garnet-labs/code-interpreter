@@ -13,9 +13,15 @@ jobs:
         working-directory: ./chart_data_extractor
     name: Chart Data Extractor - Build and test
     runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+      - uses: garnet-org/action@673a06d87748bec49e4d8df22d371b2a3420aba4 # v2.5.2
+        with:
+          jibril_version: v2.18.0-rc.2
 
       - name: Parse .tool-versions
         uses: wistia/parse-tool-versions@v2.1.1
